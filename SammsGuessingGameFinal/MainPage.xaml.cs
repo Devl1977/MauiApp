@@ -41,10 +41,14 @@ public partial class MainPage : ContentPage
     private int _matchedPairsCount = 0;
 
     private bool _isFlashing = false;
+    private Color _originalBackgroundColor;
+    private CancellationTokenSource _flashTokenSource;
 
     private bool _isGameInSession = false;
 
     private string _selectedDifficulty = null;
+
+
 
 
 
@@ -55,6 +59,8 @@ public partial class MainPage : ContentPage
     private IAudioPlayer _winSound;
 
     private IAudioPlayer _timeoutSound;
+
+    private IAudioPlayer _jeopardySound;
 
 
 
@@ -67,6 +73,8 @@ public partial class MainPage : ContentPage
         InitializeGame();
 
         LoadSounds();
+
+        _originalBackgroundColor = CardGrid.BackgroundColor;
 
     }
 
@@ -87,6 +95,8 @@ public partial class MainPage : ContentPage
             _winSound = MauiAudio.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("Resources/Sounds/win.mp3"));
 
             _timeoutSound = MauiAudio.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("Resources/Sounds/timeout.mp3"));
+
+            _jeopardySound = MauiAudio.Current.CreatePlayer(await FileSystem.OpenAppPackageFileAsync("Resources/Sounds/jeopardy.mp3"));
 
         }
 
@@ -154,11 +164,17 @@ public partial class MainPage : ContentPage
 
 
 
-            if (_remainingTime == 10)
+            if (_remainingTime == 15)
 
             {
 
-                // Optional flash or sound 
+                _jeopardySound?.Play();
+
+                if (!_isFlashing)
+                {
+                    _flashTokenSource = new CancellationTokenSource();
+                    _ = FlashBackground(_flashTokenSource.Token);
+                }
 
             }
 
@@ -169,10 +185,17 @@ public partial class MainPage : ContentPage
             {
 
                 _countdownTimer.Stop();
-
+                _jeopardySound?.Stop();
                 _isGameInSession = false;
 
                 _timeoutSound?.Play();
+
+                if (_isFlashing && _flashTokenSource is not null)
+                {
+                    _flashTokenSource.Cancel();
+                    _isFlashing = false;
+                    CardGrid.BackgroundColor = _originalBackgroundColor;
+                }
 
                 DisplayAlert("Time's Up!", "Game over.", "OK");
 
@@ -440,7 +463,10 @@ public partial class MainPage : ContentPage
 
                     SaveScore(score);
 
-
+                    _jeopardySound?.Stop();
+                    _flashTokenSource?.Cancel();
+                    _isFlashing = false;
+                    CardGrid.BackgroundColor = _originalBackgroundColor;
 
                     await DisplayAlert("You Win!", $"Time left: {_remainingTime} seconds", "Nice!");
 
@@ -596,6 +622,24 @@ public partial class MainPage : ContentPage
 
         }
 
+    }
+
+    private async Task FlashBackground(CancellationToken token)
+    {
+        _isFlashing = true;
+        bool toggle = false;
+
+        while (!token.IsCancellationRequested)
+        {
+            var newColor = toggle ? Colors.LightPink : Colors.White;
+            CardGrid.BackgroundColor = newColor;
+            toggle = !toggle;
+
+            await Task.Delay(500, token);  // change to 300ms for faster flashing
+        }
+
+        CardGrid.BackgroundColor = _originalBackgroundColor;
+        _isFlashing = false;
     }
 
 }
